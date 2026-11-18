@@ -387,7 +387,7 @@ void CMenus::RenderSettingsKagune(CUIRect MainView)
 	Left.HSplitTop(20.0f, &Button, &Left);
 	if(DoButton_CheckBox(&g_Config.m_ClKagune, TCLocalize("Tentacles around the tee"), g_Config.m_ClKagune, &Button))
 		g_Config.m_ClKagune ^= 1;
-	Ui()->DoToolTip(&g_Config.m_ClKagune, &Button, TCLocalize("Purely visual: drawn on your screen only, nothing is sent to the server"));
+	GameClient()->m_Tooltips.DoToolTip(&g_Config.m_ClKagune, &Button, TCLocalize("Purely visual: drawn on your screen only, nothing is sent to the server"));
 
 	if(g_Config.m_ClKagune)
 	{
