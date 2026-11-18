@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       CARGO_HTTP_MULTIPLEXING: false
+      DDNET_NO_GIT_HASH: 1
     steps:
     - uses: actions/checkout@v5
       with:
