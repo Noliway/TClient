@@ -38,6 +38,34 @@ class CPlayers : public CComponent
 		int ClientId);
 	bool IsPlayerInfoAvailable(int ClientId) const;
 
+	// Kagune: purely cosmetic tentacles, computed and drawn locally only
+	enum
+	{
+		KAGUNE_MAX_TENTACLES = 8,
+	};
+	struct CKaguneState
+	{
+		bool m_Valid = false;
+		int m_LastAttackTick = 0;
+		int m_LastHookState = 0;
+		int m_LastJumped = 0;
+		int m_NextTentacle = 0;
+		int m_HookMask = 0; // tentacles currently stretched out as the hook (set by RenderKaguneHook)
+		float m_NextIdleLash = 0.0f;
+		float m_aLashStart[KAGUNE_MAX_TENTACLES];
+		float m_aLashAngle[KAGUNE_MAX_TENTACLES];
+		float m_aLashReach[KAGUNE_MAX_TENTACLES];
+	};
+	CKaguneState m_aKagune[MAX_CLIENTS];
+	std::vector<IGraphics::CFreeformItem> m_vKaguneQuads;
+
+	void KaguneTrigger(CKaguneState &State, int Count, float Time, float Angle, float Reach, bool InOrder);
+	void KaguneUpdate(CKaguneState &State, int Count, float Time, const CNetObj_Character &Player, vec2 Position, vec2 Aim);
+	void KaguneAppendStrand(const vec2 *pPoints, const float *pHalfWidths, int NumPoints, float WidthMul);
+	void KaguneDrawPass(float R, float G, float B, float A, bool Additive);
+	void RenderKagune(int ClientId, vec2 Position, const CNetObj_Character &Player, vec2 Aim, vec2 Vel, float Alpha, bool Paused);
+	void RenderKaguneHook(int ClientId, vec2 Pos, vec2 HookPos, float Alpha);
+
 	int m_WeaponEmoteQuadContainerIndex;
 	int m_aWeaponSpriteMuzzleQuadContainerIndex[NUM_WEAPONS];
 

@@ -43,6 +43,7 @@ enum
 	TCLIENT_TAB_WARLIST,
 	TCLIENT_TAB_BINDCHAT,
 	TCLIENT_TAB_STATUSBAR,
+	TCLIENT_TAB_KAGUNE,
 	TCLIENT_TAB_INFO,
 	NUMBER_OF_TCLIENT_TABS
 };
@@ -341,6 +342,7 @@ void CMenus::RenderSettingsTClient(CUIRect MainView)
 		TCLocalize("War List"),
 		TCLocalize("Chat Binds"),
 		TCLocalize("Status Bar"),
+		TCLocalize("Kagune"),
 		TCLocalize("Info")};
 
 	for(int Tab = 0; Tab < NUMBER_OF_TCLIENT_TABS; ++Tab)
@@ -367,8 +369,64 @@ void CMenus::RenderSettingsTClient(CUIRect MainView)
 		RenderSettingsTClientWarList(MainView);
 	if(s_CurCustomTab == TCLIENT_TAB_STATUSBAR)
 		RenderSettingsTClientStatusBar(MainView);
+	if(s_CurCustomTab == TCLIENT_TAB_KAGUNE)
+		RenderSettingsKagune(MainView);
 	if(s_CurCustomTab == TCLIENT_TAB_INFO)
 		RenderSettingsTClientInfo(MainView);
+}
+
+void CMenus::RenderSettingsKagune(CUIRect MainView)
+{
+	CUIRect Left, Right, Label, Button;
+	MainView.VSplitMid(&Left, &Right, 20.0f);
+
+	Left.HSplitTop(30.0f, &Label, &Left);
+	Ui()->DoLabel(&Label, TCLocalize("Kagune tentacles"), 20.0f, TEXTALIGN_ML);
+	Left.HSplitTop(5.0f, nullptr, &Left);
+
+	Left.HSplitTop(20.0f, &Button, &Left);
+	if(DoButton_CheckBox(&g_Config.m_ClKagune, TCLocalize("Tentacles around the tee"), g_Config.m_ClKagune, &Button))
+		g_Config.m_ClKagune ^= 1;
+	Ui()->DoToolTip(&g_Config.m_ClKagune, &Button, TCLocalize("Purely visual: drawn on your screen only, nothing is sent to the server"));
+
+	if(g_Config.m_ClKagune)
+	{
+		Left.HSplitTop(20.0f, &Button, &Left);
+		if(DoButton_CheckBox(&g_Config.m_ClKaguneOthers, TCLocalize("Also on other players"), g_Config.m_ClKaguneOthers, &Button))
+			g_Config.m_ClKaguneOthers ^= 1;
+
+		Left.HSplitTop(20.0f, &Button, &Left);
+		Ui()->DoScrollbarOption(&g_Config.m_ClKaguneMode, &g_Config.m_ClKaguneMode, &Button, TCLocalize("Mode (0 turns, 1 random, 2 both)"), 0, 2);
+		Left.HSplitTop(20.0f, &Button, &Left);
+		Ui()->DoScrollbarOption(&g_Config.m_ClKaguneCount, &g_Config.m_ClKaguneCount, &Button, TCLocalize("Tentacles"), 2, 8);
+		Left.HSplitTop(20.0f, &Button, &Left);
+		Ui()->DoScrollbarOption(&g_Config.m_ClKaguneLength, &g_Config.m_ClKaguneLength, &Button, TCLocalize("Length"), 20, 120);
+		Left.HSplitTop(20.0f, &Button, &Left);
+		Ui()->DoScrollbarOption(&g_Config.m_ClKaguneWidth, &g_Config.m_ClKaguneWidth, &Button, TCLocalize("Thickness"), 2, 20);
+		Left.HSplitTop(20.0f, &Button, &Left);
+		Ui()->DoScrollbarOption(&g_Config.m_ClKaguneSway, &g_Config.m_ClKaguneSway, &Button, TCLocalize("Sway"), 0, 100, &CUi::ms_LinearScrollbarScale, 0u, "%");
+	}
+
+	Right.HSplitTop(30.0f, &Label, &Right);
+	Ui()->DoLabel(&Label, TCLocalize("Kagune hook"), 20.0f, TEXTALIGN_ML);
+	Right.HSplitTop(5.0f, nullptr, &Right);
+
+	Right.HSplitTop(20.0f, &Button, &Right);
+	if(DoButton_CheckBox(&g_Config.m_ClKaguneHook, TCLocalize("Hook as kagune"), g_Config.m_ClKaguneHook, &Button))
+		g_Config.m_ClKaguneHook ^= 1;
+
+	if(g_Config.m_ClKaguneHook)
+	{
+		Right.HSplitTop(20.0f, &Button, &Right);
+		Ui()->DoScrollbarOption(&g_Config.m_ClKaguneHookStrands, &g_Config.m_ClKaguneHookStrands, &Button, TCLocalize("Strands"), 1, 6);
+	}
+
+	Right.HSplitTop(20.0f, &Button, &Right);
+	if(DoButton_CheckBox(&g_Config.m_ClKaguneGlow, TCLocalize("Glow"), g_Config.m_ClKaguneGlow, &Button))
+		g_Config.m_ClKaguneGlow ^= 1;
+
+	static CButtonContainer s_KaguneColorReset;
+	DoLine_ColorPicker(&s_KaguneColorReset, 25.0f, 13.0f, 5.0f, &Right, TCLocalize("Kagune color"), &g_Config.m_ClKaguneColor, ColorRGBA(1.0f, 0.0f, 0.0f, 1.0f), false);
 }
 
 void CMenus::RenderSettingsTClientSettings(CUIRect MainView)
@@ -2286,6 +2344,7 @@ void CMenus::RenderSettingsTClientInfo(CUIRect MainView)
 		TCLocalize("War List"),
 		TCLocalize("Chat Binds"),
 		TCLocalize("Status Bar"),
+		TCLocalize("Kagune"),
 		TCLocalize("Info")};
 	static int s_aShowTabs[NUMBER_OF_TCLIENT_TABS] = {};
 	for(int i = 0; i < NUMBER_OF_TCLIENT_TABS - 1; ++i)

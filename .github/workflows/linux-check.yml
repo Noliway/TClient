@@ -1,0 +1,61 @@
+name: Linux compile check
+
+# Fast feedback: builds the client with warnings treated as errors and
+# prints the first compiler errors as annotations on the run page.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - kagune-client
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+    env:
+      CARGO_HTTP_MULTIPLEXING: false
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        submodules: recursive
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update -y
+        sudo apt-get install -y \
+          libavcodec-dev libavformat-dev libavutil-dev libfreetype6-dev libglew-dev \
+          libnotify-dev libpng-dev libsdl2-dev libsqlite3-dev libswresample-dev \
+          libswscale-dev libx264-dev ninja-build pkg-config
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2.9.2
+      with:
+        workspaces: |
+          ./
+
+    - name: Build client (warnings are errors)
+      shell: bash
+      run: |
+        mkdir build
+        cd build
+        CXXFLAGS=-Werror cmake -G Ninja -DCMAKE_BUILD_TYPE=Release -DSERVER=OFF -DTOOLS=OFF -DDOWNLOAD_GTEST=OFF -DVULKAN=OFF ..
+        set +e
+        cmake --build . --target DDNet 2>&1 | tee ../build.log
+        STATUS=${PIPESTATUS[0]}
+        set -e
+        if [ "$STATUS" != "0" ]; then
+          grep -E "error:|error C[0-9]+|fatal error|undefined reference|CMake Error" ../build.log | grep -v -- "-Werror" | head -10 | while IFS= read -r LINE; do
+            LINE="${LINE//'%'/'%25'}"
+            echo "::error::${LINE:0:900}"
+          done
+        fi
+        exit $STATUS
+
+    - name: Verify the mod is inside the binary
+      if: always()
+      shell: bash
+      run: |
+        BIN=$(find build -maxdepth 2 -type f -name DDNet | head -1)
+        echo "::notice::binary: ${BIN:-none} size: $(stat -c %s "$BIN" 2>/dev/null)"
+        for S in quickhammer tp_to_cursor cl_antiping "Tentacles around the tee" cl_kagune; do
+          echo "::notice::linux binary, '$S' -> $(grep -c -a -F -- "$S" "$BIN" 2>/dev/null || true) matching lines"
+        done

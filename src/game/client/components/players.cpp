@@ -550,6 +550,15 @@ void CPlayers::RenderHook(
 		(Pos.y > ScreenRect.m_BottomRight.y && HookPos.y > ScreenRect.m_BottomRight.y))
 		return;
 
+	// kagune hook: the hook itself is drawn as tentacles instead of the chain (cosmetic only)
+	if(g_Config.m_ClKaguneHook && in_range(ClientId, MAX_CLIENTS - 1) &&
+		(ClientId == GameClient()->m_Snap.m_LocalClientId || g_Config.m_ClKaguneOthers))
+	{
+		RenderKaguneHook(ClientId, Pos, HookPos, Alpha);
+		RenderHand(&RenderInfo, Position, normalize(HookPos - Pos), -pi / 2, vec2(20, 0), Alpha);
+		return;
+	}
+
 	float d = distance(Pos, HookPos);
 	vec2 Dir = normalize(Pos - HookPos);
 
@@ -589,6 +598,334 @@ void CPlayers::RenderHook(
 		Graphics()->SetColor(GameClient()->m_Rainbow.m_RainbowColor.WithAlpha(Alpha));
 
 	RenderHand(&RenderInfo, Position, normalize(HookPos - Pos), -pi / 2, vec2(20, 0), Alpha);
+}
+
+// ---------------------------------------------------------------------------
+// Kagune: cosmetic tentacles. Everything here only changes what is drawn on
+// this client's screen, no input or network data is touched.
+// ---------------------------------------------------------------------------
+static constexpr int KAGUNE_SEGMENTS = 14;
+static constexpr float KAGUNE_LASH_TIME = 0.45f;
+
+static float KaguneAnchorAngle(int Index, int Count)
+{
+	return -pi / 2.0f + Index * (2.0f * pi / Count);
+}
+
+// 0..1 extension of a strike over its lifetime: snaps out fast, holds briefly, then pulls back
+static float KaguneLashExtension(float Progress)
+{
+	if(Progress < 0.0f || Progress >= 1.0f)
+		return 0.0f;
+	if(Progress < 0.28f)
+	{
+		const float x = 1.0f - Progress / 0.28f;
+		return 1.0f - x * x * x;
+	}
+	if(Progress < 0.45f)
+		return 1.0f;
+	const float x = (Progress - 0.45f) / 0.55f;
+	return 1.0f - x * x * (3.0f - 2.0f * x);
+}
+
+void CPlayers::KaguneTrigger(CKaguneState &State, int Count, float Time, float Angle, float Reach, bool InOrder)
+{
+	const vec2 Dir = direction(Angle);
+	const int Start = InOrder ? State.m_NextTentacle % Count : rand() % Count;
+
+	// First pass prefers tentacles on the side the strike goes to, second pass takes any free one.
+	int Chosen = -1;
+	for(int Pass = 0; Pass < 2 && Chosen < 0; Pass++)
+	{
+		for(int n = 0; n < Count; n++)
+		{
+			const int i = (Start + n) % Count;
+			if(Time - State.m_aLashStart[i] < KAGUNE_LASH_TIME)
+				continue; // still busy
+			if(Pass == 0 && dot(direction(KaguneAnchorAngle(i, Count)), Dir) < -0.2f)
+				continue;
+			Chosen = i;
+			break;
+		}
+	}
+	if(Chosen < 0)
+		return;
+
+	if(InOrder)
+		State.m_NextTentacle = (Chosen + 1) % Count;
+	State.m_aLashStart[Chosen] = Time;
+	State.m_aLashAngle[Chosen] = Angle;
+	State.m_aLashReach[Chosen] = Reach;
+}
+
+void CPlayers::KaguneUpdate(CKaguneState &State, int Count, float Time, const CNetObj_Character &Player, vec2 Position, vec2 Aim)
+{
+	const int Mode = g_Config.m_ClKaguneMode; // 0 = in turn on actions, 1 = random, 2 = both
+	const float Reach = g_Config.m_ClKaguneLength * 1.9f;
+
+	if(Mode != 1)
+	{
+		// shooting (or hammering): the next tentacle in line strikes where the tee aims
+		if(Player.m_AttackTick != State.m_LastAttackTick)
+			KaguneTrigger(State, Count, Time, angle(Aim), Reach, true);
+
+		// throwing the hook: a tentacle strikes towards the hook
+		// (not needed when the hook itself is made of body tentacles)
+		if(!g_Config.m_ClKaguneHook && Player.m_HookState == HOOK_FLYING && State.m_LastHookState != HOOK_FLYING)
+		{
+			const vec2 ToHook = vec2((float)Player.m_HookX, (float)Player.m_HookY) - Position;
+			if(length(ToHook) > 1.0f)
+				KaguneTrigger(State, Count, Time, angle(ToHook), Reach, true);
+		}
+
+		// jumping: a tentacle pushes down
+		if((Player.m_Jumped & ~State.m_LastJumped & 3) != 0)
+			KaguneTrigger(State, Count, Time, pi / 2.0f + random_float(-0.6f, 0.6f), Reach, true);
+	}
+
+	if(Mode != 0 && Time >= State.m_NextIdleLash)
+	{
+		KaguneTrigger(State, Count, Time, random_float(0.0f, 2.0f * pi), Reach * 0.8f, false);
+		State.m_NextIdleLash = Time + random_float(0.7f, 2.0f);
+	}
+
+	State.m_LastAttackTick = Player.m_AttackTick;
+	State.m_LastHookState = Player.m_HookState;
+	State.m_LastJumped = Player.m_Jumped;
+}
+
+void CPlayers::KaguneAppendStrand(const vec2 *pPoints, const float *pHalfWidths, int NumPoints, float WidthMul)
+{
+	for(int i = 0; i + 1 < NumPoints; i++)
+	{
+		vec2 aNormals[2];
+		for(int k = 0; k < 2; k++)
+		{
+			const int Index = i + k;
+			const vec2 Tangent = pPoints[std::min(Index + 1, NumPoints - 1)] - pPoints[std::max(Index - 1, 0)];
+			const float Len = length(Tangent);
+			aNormals[k] = Len > 0.0001f ? vec2(-Tangent.y, Tangent.x) * (1.0f / Len) : vec2(0.0f, 1.0f);
+		}
+		const vec2 P0 = pPoints[i];
+		const vec2 P1 = pPoints[i + 1];
+		const vec2 N0 = aNormals[0] * (pHalfWidths[i] * WidthMul);
+		const vec2 N1 = aNormals[1] * (pHalfWidths[i + 1] * WidthMul);
+		m_vKaguneQuads.push_back(IGraphics::CFreeformItem(
+			P1.x - N1.x, P1.y - N1.y, P1.x + N1.x, P1.y + N1.y,
+			P0.x - N0.x, P0.y - N0.y, P0.x + N0.x, P0.y + N0.y));
+	}
+}
+
+void CPlayers::KaguneDrawPass(float R, float G, float B, float A, bool Additive)
+{
+	if(!m_vKaguneQuads.empty())
+	{
+		Graphics()->TextureClear();
+		if(Additive)
+			Graphics()->BlendAdditive();
+		Graphics()->QuadsBegin();
+		Graphics()->SetColor(R, G, B, A);
+		Graphics()->QuadsDrawFreeform(m_vKaguneQuads.data(), (int)m_vKaguneQuads.size());
+		Graphics()->QuadsEnd();
+		if(Additive)
+			Graphics()->BlendNormal();
+	}
+	m_vKaguneQuads.clear();
+}
+
+void CPlayers::RenderKagune(int ClientId, vec2 Position, const CNetObj_Character &Player, vec2 Aim, vec2 Vel, float Alpha, bool Paused)
+{
+	if(!g_Config.m_ClKagune || !in_range(ClientId, MAX_CLIENTS - 1))
+		return;
+	const bool Local = ClientId == GameClient()->m_Snap.m_LocalClientId;
+	if(!Local && !g_Config.m_ClKaguneOthers)
+		return;
+
+	const int Count = std::clamp(g_Config.m_ClKaguneCount, 2, (int)KAGUNE_MAX_TENTACLES);
+	const float Time = Client()->LocalTime();
+	CKaguneState &State = m_aKagune[ClientId];
+
+	if(!State.m_Valid)
+	{
+		State.m_Valid = true;
+		State.m_LastAttackTick = Player.m_AttackTick;
+		State.m_LastHookState = Player.m_HookState;
+		State.m_LastJumped = Player.m_Jumped;
+		State.m_NextTentacle = 0;
+		State.m_NextIdleLash = Time + random_float(0.4f, 1.5f);
+		for(int i = 0; i < KAGUNE_MAX_TENTACLES; i++)
+		{
+			State.m_aLashStart[i] = -100.0f;
+			State.m_aLashAngle[i] = 0.0f;
+			State.m_aLashReach[i] = 0.0f;
+		}
+	}
+	else if(!Paused)
+	{
+		KaguneUpdate(State, Count, Time, Player, Position, Aim);
+	}
+
+	// tentacles that are currently stretched out as the hook are drawn by RenderKaguneHook
+	const int HookMask = State.m_HookMask;
+	State.m_HookMask = 0;
+
+	const ColorRGBA Base = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_ClKaguneColor, false));
+	const float Length = (float)g_Config.m_ClKaguneLength;
+	const float HalfBase = g_Config.m_ClKaguneWidth * 0.5f;
+	const float Sway = g_Config.m_ClKaguneSway / 100.0f;
+	const float BodyRadius = 13.0f;
+
+	// moving fast drags the tentacles behind the tee
+	vec2 Drag = Vel * -1.5f;
+	const float DragLen = length(Drag);
+	if(DragLen > 28.0f)
+		Drag = Drag * (28.0f / DragLen);
+
+	vec2 aaPoints[KAGUNE_MAX_TENTACLES][KAGUNE_SEGMENTS + 1];
+	float aaHalfWidths[KAGUNE_MAX_TENTACLES][KAGUNE_SEGMENTS + 1];
+
+	for(int i = 0; i < Count; i++)
+	{
+		const float Phase = i * 1.9f + ClientId * 0.7f;
+		const float AnchorAngle = KaguneAnchorAngle(i, Count);
+		const vec2 Anchor = Position + direction(AnchorAngle) * BodyRadius;
+		const float SwayAngle = Sway * 0.55f * std::sin(Time * 1.6f + Phase);
+		const float Breath = 0.88f + 0.12f * std::sin(Time * 2.3f + Phase * 1.3f);
+		vec2 Vec = direction(AnchorAngle + SwayAngle) * (Length * Breath) + Drag;
+
+		const float Ext = KaguneLashExtension((Time - State.m_aLashStart[i]) / KAGUNE_LASH_TIME);
+		if(Ext > 0.0f)
+			Vec = mix(Vec, direction(State.m_aLashAngle[i]) * State.m_aLashReach[i], Ext);
+
+		const float VecLen = std::max(length(Vec), 1.0f);
+		const vec2 Along = Vec * (1.0f / VecLen);
+		const vec2 Perp(-Along.y, Along.x);
+		const float Amp = (3.0f + 12.0f * Sway) * (1.0f - 0.85f * Ext); // strikes straighten the tentacle
+		const float Droop = (1.0f - Ext) * 9.0f * Sway;
+		const float WidthBoost = 1.0f + 0.35f * Ext;
+
+		for(int s = 0; s <= KAGUNE_SEGMENTS; s++)
+		{
+			const float t = (float)s / KAGUNE_SEGMENTS;
+			const float Env = std::sin(t * pi); // pinned to the body, free at the tip
+			const float Curl = Amp * Env * std::sin(Time * 3.4f + Phase + t * 5.5f);
+			aaPoints[i][s] = Anchor + Vec * t + Perp * Curl + vec2(0.0f, Droop * t * t);
+			aaHalfWidths[i][s] = HalfBase * WidthBoost * std::pow(1.0f - t, 0.85f) + 0.5f;
+		}
+	}
+
+	const auto AddAll = [&](float WidthMul) {
+		for(int i = 0; i < Count; i++)
+		{
+			if(HookMask & (1 << i))
+				continue;
+			KaguneAppendStrand(aaPoints[i], aaHalfWidths[i], KAGUNE_SEGMENTS + 1, WidthMul);
+		}
+	};
+
+	m_vKaguneQuads.clear();
+	if(g_Config.m_ClKaguneGlow)
+	{
+		AddAll(2.6f);
+		KaguneDrawPass(Base.r, Base.g, Base.b, 0.16f * Alpha, true);
+	}
+	AddAll(1.35f);
+	KaguneDrawPass(0.08f, 0.0f, 0.02f, 0.92f * Alpha, false);
+	AddAll(1.0f);
+	KaguneDrawPass(Base.r, Base.g, Base.b, Alpha, false);
+	AddAll(0.35f);
+	KaguneDrawPass(mix(Base.r, 1.0f, 0.6f), mix(Base.g, 1.0f, 0.6f), mix(Base.b, 1.0f, 0.6f), 0.95f * Alpha, false);
+
+	Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
+}
+
+// The hook is made of the tee's own body tentacles: the ones facing the hook
+// stretch from their anchor on the body all the way to the hook head.
+void CPlayers::RenderKaguneHook(int ClientId, vec2 Pos, vec2 HookPos, float Alpha)
+{
+	const float Dist = distance(Pos, HookPos);
+	if(Dist < 1.0f)
+		return;
+
+	const float Time = Client()->LocalTime();
+	const vec2 Dir = normalize(HookPos - Pos); // tee -> hook head
+	const vec2 Perp(-Dir.y, Dir.x);
+	const ColorRGBA Base = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_ClKaguneColor, false));
+	const float Sway = g_Config.m_ClKaguneSway / 100.0f;
+	const int Count = std::clamp(g_Config.m_ClKaguneCount, 2, (int)KAGUNE_MAX_TENTACLES);
+	const int Strands = std::min(std::clamp(g_Config.m_ClKaguneHookStrands, 1, 6), Count);
+	const int Segments = std::clamp((int)(Dist / 10.0f), 8, 80);
+	const float HalfBase = std::max(1.5f, g_Config.m_ClKaguneWidth * 0.5f);
+
+	// pick the body tentacles that face the hook the most
+	int aChosen[6];
+	int Mask = 0;
+	for(int k = 0; k < Strands; k++)
+	{
+		int Best = -1;
+		float BestDot = -2.0f;
+		for(int i = 0; i < Count; i++)
+		{
+			if(Mask & (1 << i))
+				continue;
+			const float D = dot(direction(KaguneAnchorAngle(i, Count)), Dir);
+			if(D > BestDot)
+			{
+				BestDot = D;
+				Best = i;
+			}
+		}
+		aChosen[k] = Best;
+		Mask |= 1 << Best;
+	}
+	if(in_range(ClientId, MAX_CLIENTS - 1))
+		m_aKagune[ClientId].m_HookMask = Mask; // RenderKagune skips these, they are busy being the hook
+
+	static vec2 s_aaPoints[6][81];
+	static float s_aaHalfWidths[6][81];
+
+	for(int k = 0; k < Strands; k++)
+	{
+		const vec2 Start = Pos + direction(KaguneAnchorAngle(aChosen[k], Count)) * 13.0f;
+		const float Phase = aChosen[k] * 1.9f;
+		for(int i = 0; i <= Segments; i++)
+		{
+			const float t = (float)i / Segments; // 0 at the body, 1 at the hook head
+			const float Env = std::sin(t * pi); // pinned at the body and at the hook head
+			const float Amp = (3.0f + 14.0f * Sway) * std::min(1.0f, Dist / 220.0f);
+			const float Off = Env * Amp * std::sin(Time * 4.0f + t * 9.0f + Phase);
+			s_aaPoints[k][i] = mix(Start, HookPos, t) + Perp * Off;
+			s_aaHalfWidths[k][i] = HalfBase * (1.0f - 0.65f * t) + 0.5f;
+		}
+	}
+
+	const float TipHalf = std::max(3.0f, HalfBase * 1.1f);
+	const auto AddAll = [&](float WidthMul) {
+		for(int k = 0; k < Strands; k++)
+			KaguneAppendStrand(s_aaPoints[k], s_aaHalfWidths[k], Segments + 1, WidthMul);
+
+		// spear tip at the hook head
+		const vec2 Tip = HookPos + Dir * (14.0f * WidthMul);
+		const float W = TipHalf * WidthMul;
+		m_vKaguneQuads.push_back(IGraphics::CFreeformItem(
+			Tip.x, Tip.y, Tip.x, Tip.y,
+			HookPos.x - Perp.x * W, HookPos.y - Perp.y * W, HookPos.x + Perp.x * W, HookPos.y + Perp.y * W));
+	};
+
+	m_vKaguneQuads.clear();
+	if(g_Config.m_ClKaguneGlow)
+	{
+		AddAll(2.4f);
+		KaguneDrawPass(Base.r, Base.g, Base.b, 0.18f * Alpha, true);
+	}
+	AddAll(1.3f);
+	KaguneDrawPass(0.08f, 0.0f, 0.02f, 0.92f * Alpha, false);
+	AddAll(1.0f);
+	KaguneDrawPass(Base.r, Base.g, Base.b, Alpha, false);
+	AddAll(0.35f);
+	KaguneDrawPass(mix(Base.r, 1.0f, 0.6f), mix(Base.g, 1.0f, 0.6f), mix(Base.b, 1.0f, 0.6f), 0.95f * Alpha, false);
+
+	Graphics()->SetColor(1.0f, 1.0f, 1.0f, 1.0f);
 }
 
 void CPlayers::RenderPlayer(
@@ -794,6 +1131,9 @@ void CPlayers::RenderPlayer(
 	// do skidding
 	if(!InAir && WantOtherDir && length(Vel * 50) > 500.0f)
 		GameClient()->m_Effects.SkidTrail(Position, Vel, Player.m_Direction, Alpha, Volume);
+
+	// kagune tentacles are drawn behind the tee
+	RenderKagune(ClientId, Position, Player, Direction, Vel, Alpha, Paused);
 
 	// draw gun
 	if(Player.m_Weapon >= 0)

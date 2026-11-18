@@ -285,3 +285,16 @@ MACRO_CONFIG_INT(TcUiCompactList, tc_ui_compact_list, 0, 0, 1, CFGFLAG_CLIENT | 
 MACRO_CONFIG_INT(TcShowhudDummyPosition, tc_showhud_dummy_position, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show ingame HUD (Dummy Position)")
 MACRO_CONFIG_INT(TcShowhudDummySpeed, tc_showhud_dummy_speed, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show ingame HUD (Dummy Speed)")
 MACRO_CONFIG_INT(TcShowhudDummyAngle, tc_showhud_dummy_angle, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show ingame HUD (Dummy Aim Angle)")
+
+// Kagune visuals: purely cosmetic, drawn only on your own screen, nothing is sent to the server
+MACRO_CONFIG_INT(ClKagune, cl_kagune, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Draw kagune tentacles around tees (visual only)")
+MACRO_CONFIG_INT(ClKaguneOthers, cl_kagune_others, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Draw kagune tentacles around other players as well")
+MACRO_CONFIG_INT(ClKaguneCount, cl_kagune_count, 6, 2, 8, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Number of tentacles around a tee")
+MACRO_CONFIG_INT(ClKaguneMode, cl_kagune_mode, 2, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Tentacle behaviour (0 = take turns on actions: shoot, hook, jump; 1 = random; 2 = both)")
+MACRO_CONFIG_INT(ClKaguneLength, cl_kagune_length, 55, 20, 120, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Resting length of the tentacles")
+MACRO_CONFIG_INT(ClKaguneWidth, cl_kagune_width, 8, 2, 20, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Thickness of the tentacles at the base")
+MACRO_CONFIG_INT(ClKaguneSway, cl_kagune_sway, 60, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "How much the tentacles sway (0-100)")
+MACRO_CONFIG_INT(ClKaguneGlow, cl_kagune_glow, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Soft glow around kagune tentacles")
+MACRO_CONFIG_INT(ClKaguneHook, cl_kagune_hook, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Draw the hook itself as kagune tentacles")
+MACRO_CONFIG_INT(ClKaguneHookStrands, cl_kagune_hook_strands, 3, 1, 6, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Number of strands in the kagune hook")
+MACRO_CONFIG_COL(ClKaguneColor, cl_kagune_color, 65407, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Main color of the kagune")

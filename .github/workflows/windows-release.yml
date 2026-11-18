@@ -1,0 +1,97 @@
+name: Windows release build
+
+# Builds the Windows client, uploads it as an artifact and publishes a GitHub release.
+# Compiler errors, if any, are shown as annotations on the run page.
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - kagune-client
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    env:
+      CARGO_HTTP_MULTIPLEXING: false
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        submodules: recursive
+
+    - name: Install Vulkan SDK
+      uses: humbletim/install-vulkan-sdk@v1.2
+      with:
+        version: 1.3.296.0
+        cache: true
+
+    - name: Cache Rust dependencies
+      uses: Swatinem/rust-cache@v2.9.2
+      with:
+        workspaces: |
+          ./
+
+    - name: Build release
+      shell: bash
+      run: |
+        mkdir release
+        cd release
+        cmake -A x64 -DEXCEPTION_HANDLING=ON -DVULKAN=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=. ..
+        set +e
+        cmake --build . --config Release --target package_default 2>&1 | tee ../build.log
+        STATUS=${PIPESTATUS[0]}
+        set -e
+        if [ "$STATUS" != "0" ]; then
+          grep -E "error C[0-9]+|error:|fatal error|LNK[0-9]+|CMake Error" ../build.log | head -10 | while IFS= read -r LINE; do
+            LINE="${LINE//'%'/'%25'}"
+            echo "::error::${LINE:0:900}"
+          done
+        fi
+        exit $STATUS
+
+    - name: Collect package
+      shell: bash
+      run: |
+        cd release
+        mkdir artifacts
+        mv ./*-win64.zip artifacts/
+        ls -la artifacts
+
+    - name: Verify the mod is inside the binary
+      if: always()
+      shell: bash
+      run: |
+        python - <<'PY'
+        import glob, zipfile
+        z = zipfile.ZipFile(glob.glob("release/artifacts/*.zip")[0])
+        exe = [n for n in z.namelist() if n.lower().endswith("ddnet.exe")][0]
+        data = z.read(exe)
+        print("::notice::zip exe %s size %d" % (exe, len(data)))
+        for key in ["cl_kagune_glow", "Tentacles around the tee", "cl_kagune"]:
+            print("::notice::windows exe, '%s' -> %d" % (key, data.count(key.encode())))
+        PY
+
+    - name: Upload zip
+      uses: actions/upload-artifact@v6
+      with:
+        name: tclient-kagune-win64
+        path: release/artifacts
+
+    - name: Publish release
+      continue-on-error: true
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        # keep only the newest build so there is nothing outdated to download by mistake
+        for TAG in $(gh release list --repo "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
+          case "$TAG" in build-*) gh release delete "$TAG" --repo "${{ github.repository }}" --cleanup-tag --yes || true ;; esac
+        done
+        gh release create "build-${{ github.run_number }}" release/artifacts/*.zip \
+          --repo "${{ github.repository }}" \
+          --target "${{ github.sha }}" \
+          --title "TClient + Kagune build ${{ github.run_number }}" \
+          --notes "Windows build of the Kagune client (TClient with cosmetic kagune tentacles and kagune hook). Unzip and run the exe." \
+          --prerelease
