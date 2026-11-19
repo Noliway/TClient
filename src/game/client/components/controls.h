@@ -61,7 +61,7 @@ public:
 	bool CheckNewInput();
 
 private:
-	// Gores mode: the normal hammer key = hammer, hit once, back to the previous weapon.
+	// Gores mode: the fire key = hammer, hit once, back to the previous weapon.
 	// It only produces the same weapon-switch and fire inputs you could press yourself.
 	struct CQuickHammer
 	{
@@ -76,6 +76,7 @@ private:
 
 	static void ConKeyInputState(IConsole::IResult *pResult, void *pUserData);
 	static void ConKeyInputCounter(IConsole::IResult *pResult, void *pUserData);
+	static void ConKeyInputFire(IConsole::IResult *pResult, void *pUserData);
 	static void ConKeyInputSet(IConsole::IResult *pResult, void *pUserData);
 	static void ConKeyInputNextPrevWeapon(IConsole::IResult *pResult, void *pUserData);
 };

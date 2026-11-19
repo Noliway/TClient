@@ -90,6 +90,21 @@ void CControls::ConKeyInputCounter(IConsole::IResult *pResult, void *pUserData)
 	*pVariable &= INPUT_STATE_MASK;
 }
 
+void CControls::ConKeyInputFire(IConsole::IResult *pResult, void *pUserData)
+{
+	CInputState *pState = (CInputState *)pUserData;
+	CControls *pControls = pState->m_pControls;
+	// Gores mode: with another weapon active, the fire key hits once with the hammer and returns to the previous weapon
+	if(g_Config.m_ClGoresMode && pResult->GetInteger(0) && pControls->QuickHammerActiveWeapon() != WEAPON_HAMMER)
+	{
+		const int Dummy = g_Config.m_ClDummy;
+		pControls->StartQuickHammer(Dummy);
+		if(pControls->m_aQuickHammer[Dummy].m_State != 0)
+			return;
+	}
+	ConKeyInputCounter(pResult, pUserData);
+}
+
 struct CInputSet
 {
 	CControls *m_pControls;
@@ -102,17 +117,6 @@ void CControls::ConKeyInputSet(IConsole::IResult *pResult, void *pUserData)
 	CInputSet *pSet = (CInputSet *)pUserData;
 	if(pResult->GetInteger(0))
 	{
-		// Gores mode: the normal "hammer" key hits once with the hammer and returns to the previous weapon
-		if(pSet->m_Value == 1 && g_Config.m_ClGoresMode)
-		{
-			const int Dummy = g_Config.m_ClDummy;
-			CControls *pControls = pSet->m_pControls;
-			if(pControls->QuickHammerActiveWeapon() != WEAPON_HAMMER)
-			{
-				pControls->StartQuickHammer(Dummy);
-				return;
-			}
-		}
 		*pSet->m_apVariables[g_Config.m_ClDummy] = pSet->m_Value;
 	}
 }
@@ -240,7 +244,7 @@ void CControls::OnConsoleInit()
 	}
 	{
 		static CInputState s_State = {this, {&m_aInputData[0].m_Fire, &m_aInputData[1].m_Fire}};
-		Console()->Register("+fire", "", CFGFLAG_CLIENT, ConKeyInputCounter, &s_State, "Fire");
+		Console()->Register("+fire", "", CFGFLAG_CLIENT, ConKeyInputFire, &s_State, "Fire");
 	}
 	{
 		static CInputState s_State = {this, {&m_aShowHookColl[0], &m_aShowHookColl[1]}};

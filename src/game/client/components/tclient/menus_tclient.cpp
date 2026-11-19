@@ -433,9 +433,9 @@ void CMenus::RenderSettingsKagune(CUIRect MainView)
 	Ui()->DoLabel(&Label, TCLocalize("Gores mode"), 20.0f, TEXTALIGN_ML);
 	Right.HSplitTop(5.0f, nullptr, &Right);
 	Right.HSplitTop(20.0f, &Button, &Right);
-	if(DoButton_CheckBox(&g_Config.m_ClGoresMode, TCLocalize("Hammer key hits once and switches back"), g_Config.m_ClGoresMode, &Button))
+	if(DoButton_CheckBox(&g_Config.m_ClGoresMode, TCLocalize("Fire key hits with hammer and switches back"), g_Config.m_ClGoresMode, &Button))
 		g_Config.m_ClGoresMode ^= 1;
-	GameClient()->m_Tooltips.DoToolTip(&g_Config.m_ClGoresMode, &Button, TCLocalize("With another weapon active, your normal hammer key switches to the hammer, hits once and switches back. No extra bind needed. It sends several inputs from one key press, so check that the server allows it"));
+	GameClient()->m_Tooltips.DoToolTip(&g_Config.m_ClGoresMode, &Button, TCLocalize("With another weapon active, your normal fire key switches to the hammer, hits once and switches back (guns will not shoot while this is on). No extra bind needed. It sends several inputs from one key press, so check that the server allows it"));
 }
 
 void CMenus::RenderSettingsTClientSettings(CUIRect MainView)
