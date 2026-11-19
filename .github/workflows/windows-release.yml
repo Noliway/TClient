@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - kagune-client
+      - gores-client
 
 permissions:
   contents: write
@@ -70,14 +70,14 @@ jobs:
         exe = [n for n in z.namelist() if n.lower().endswith("ddnet.exe")][0]
         data = z.read(exe)
         print("::notice::zip exe %s size %d" % (exe, len(data)))
-        for key in ["cl_kagune_glow", "Tentacles around the tee", "cl_kagune"]:
+        for key in ["cl_kagune_glow", "Tentacles around the tee", "cl_kagune", "cl_gores_mode"]:
             print("::notice::windows exe, '%s' -> %d" % (key, data.count(key.encode())))
         PY
 
     - name: Upload zip
       uses: actions/upload-artifact@v6
       with:
-        name: tclient-kagune-win64
+        name: tclient-kagune-gores-win64
         path: release/artifacts
 
     - name: Publish release
@@ -88,11 +88,11 @@ jobs:
       run: |
         # keep only the newest build so there is nothing outdated to download by mistake
         for TAG in $(gh release list --repo "${{ github.repository }}" --json tagName --jq '.[].tagName'); do
-          case "$TAG" in build-*) gh release delete "$TAG" --repo "${{ github.repository }}" --cleanup-tag --yes || true ;; esac
+          case "$TAG" in gores-*) gh release delete "$TAG" --repo "${{ github.repository }}" --cleanup-tag --yes || true ;; esac
         done
-        gh release create "build-${{ github.run_number }}" release/artifacts/*.zip \
+        gh release create "gores-${{ github.run_number }}" release/artifacts/*.zip \
           --repo "${{ github.repository }}" \
           --target "${{ github.sha }}" \
-          --title "TClient + Kagune build ${{ github.run_number }}" \
-          --notes "Windows build of the Kagune client (TClient with cosmetic kagune tentacles and kagune hook). Unzip and run the exe." \
+          --title "TClient + Kagune + Gores mode build ${{ github.run_number }}" \
+          --notes "Windows build of the Kagune client (TClient with cosmetic kagune tentacles, kagune hook and Gores mode). Unzip and run the exe." \
           --prerelease

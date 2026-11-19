@@ -298,3 +298,6 @@ MACRO_CONFIG_INT(ClKaguneGlow, cl_kagune_glow, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG
 MACRO_CONFIG_INT(ClKaguneHook, cl_kagune_hook, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Draw the hook itself as kagune tentacles")
 MACRO_CONFIG_INT(ClKaguneHookStrands, cl_kagune_hook_strands, 3, 1, 6, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Number of strands in the kagune hook")
 MACRO_CONFIG_COL(ClKaguneColor, cl_kagune_color, 65407, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Main color of the kagune")
+
+// Gores mode: with another weapon active, the normal hammer key hits once with the hammer and switches back
+MACRO_CONFIG_INT(ClGoresMode, cl_gores_mode, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Gores mode: the hammer key hits once and returns to the previous weapon")

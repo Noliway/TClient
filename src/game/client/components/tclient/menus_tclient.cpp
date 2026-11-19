@@ -427,6 +427,15 @@ void CMenus::RenderSettingsKagune(CUIRect MainView)
 
 	static CButtonContainer s_KaguneColorReset;
 	DoLine_ColorPicker(&s_KaguneColorReset, 25.0f, 13.0f, 5.0f, &Right, TCLocalize("Kagune color"), &g_Config.m_ClKaguneColor, ColorRGBA(1.0f, 0.0f, 0.0f, 1.0f), false);
+
+	Right.HSplitTop(15.0f, nullptr, &Right);
+	Right.HSplitTop(30.0f, &Label, &Right);
+	Ui()->DoLabel(&Label, TCLocalize("Gores mode"), 20.0f, TEXTALIGN_ML);
+	Right.HSplitTop(5.0f, nullptr, &Right);
+	Right.HSplitTop(20.0f, &Button, &Right);
+	if(DoButton_CheckBox(&g_Config.m_ClGoresMode, TCLocalize("Hammer key hits once and switches back"), g_Config.m_ClGoresMode, &Button))
+		g_Config.m_ClGoresMode ^= 1;
+	GameClient()->m_Tooltips.DoToolTip(&g_Config.m_ClGoresMode, &Button, TCLocalize("With another weapon active, your normal hammer key switches to the hammer, hits once and switches back. No extra bind needed. It sends several inputs from one key press, so check that the server allows it"));
 }
 
 void CMenus::RenderSettingsTClientSettings(CUIRect MainView)

@@ -102,6 +102,17 @@ void CControls::ConKeyInputSet(IConsole::IResult *pResult, void *pUserData)
 	CInputSet *pSet = (CInputSet *)pUserData;
 	if(pResult->GetInteger(0))
 	{
+		// Gores mode: the normal "hammer" key hits once with the hammer and returns to the previous weapon
+		if(pSet->m_Value == 1 && g_Config.m_ClGoresMode)
+		{
+			const int Dummy = g_Config.m_ClDummy;
+			CControls *pControls = pSet->m_pControls;
+			if(pControls->QuickHammerActiveWeapon() != WEAPON_HAMMER)
+			{
+				pControls->StartQuickHammer(Dummy);
+				return;
+			}
+		}
 		*pSet->m_apVariables[g_Config.m_ClDummy] = pSet->m_Value;
 	}
 }
@@ -111,6 +122,101 @@ void CControls::ConKeyInputNextPrevWeapon(IConsole::IResult *pResult, void *pUse
 	CInputSet *pSet = (CInputSet *)pUserData;
 	ConKeyInputCounter(pResult, pSet);
 	pSet->m_pControls->m_aInputData[g_Config.m_ClDummy].m_WantedWeapon = 0;
+}
+
+int CControls::QuickHammerActiveWeapon() const
+{
+	// prefer the predicted weapon, it is up to date without waiting for the server
+	const int LocalId = GameClient()->m_Snap.m_LocalClientId;
+	if(LocalId >= 0 && GameClient()->Predict() && GameClient()->m_aClients[LocalId].m_IsPredicted)
+		return GameClient()->m_aClients[LocalId].m_Predicted.m_ActiveWeapon;
+	if(GameClient()->m_Snap.m_pLocalCharacter)
+		return GameClient()->m_Snap.m_pLocalCharacter->m_Weapon;
+	return -1;
+}
+
+void CControls::StartQuickHammer(int Dummy)
+{
+	CQuickHammer &Quick = m_aQuickHammer[Dummy];
+	if(Quick.m_State != 0 || Client()->State() != IClient::STATE_ONLINE)
+		return;
+	if(GameClient()->m_Snap.m_SpecInfo.m_Active || GameClient()->m_Spectator.IsActive())
+		return;
+	// never interfere while the fire button is held down
+	if((m_aInputData[Dummy].m_Fire & 1) != 0)
+		return;
+
+	const int Weapon = QuickHammerActiveWeapon();
+	// no weapon info yet, already on the hammer, or ninja (cannot be switched away from)
+	if(Weapon < 0 || Weapon == WEAPON_HAMMER || Weapon == WEAPON_NINJA)
+		return;
+
+	Quick.m_PrevWeapon = Weapon;
+	Quick.m_StartTime = time_get();
+	Quick.m_State = 1;
+}
+
+// Called once per input packet, so every step below lands in its own input.
+void CControls::UpdateQuickHammer(int Dummy)
+{
+	CQuickHammer &Quick = m_aQuickHammer[Dummy];
+	if(Quick.m_State == 0)
+		return;
+
+	CNetObj_PlayerInput &Input = m_aInputData[Dummy];
+	const int Weapon = QuickHammerActiveWeapon();
+	const bool SwitchBack = Quick.m_PrevWeapon != WEAPON_HAMMER;
+
+	// Safety net: give up after half a second and never leave fire pressed.
+	if(Weapon < 0 || time_get() - Quick.m_StartTime > time_freq() / 2)
+	{
+		if((Input.m_Fire & 1) != 0)
+			Input.m_Fire = (Input.m_Fire + 1) & INPUT_STATE_MASK;
+		if(SwitchBack && Weapon >= 0 && Weapon != Quick.m_PrevWeapon)
+			Input.m_WantedWeapon = Quick.m_PrevWeapon + 1;
+		Quick.m_State = 0;
+		return;
+	}
+
+	switch(Quick.m_State)
+	{
+	case 1:
+		// Hit only once the hammer is really the active weapon, so no other weapon can fire by mistake.
+		if(Weapon == WEAPON_HAMMER)
+		{
+			if((Input.m_Fire & 1) == 0)
+				Input.m_Fire = (Input.m_Fire + 1) & INPUT_STATE_MASK;
+			Quick.m_State = 2;
+		}
+		else
+		{
+			Input.m_WantedWeapon = WEAPON_HAMMER + 1;
+		}
+		break;
+	case 2:
+		// The press went out with the previous input; release now and switch back.
+		if((Input.m_Fire & 1) != 0)
+			Input.m_Fire = (Input.m_Fire + 1) & INPUT_STATE_MASK;
+		if(SwitchBack)
+		{
+			Input.m_WantedWeapon = Quick.m_PrevWeapon + 1;
+			Quick.m_State = 3;
+		}
+		else
+		{
+			Quick.m_State = 0;
+		}
+		break;
+	case 3:
+		if(Weapon == Quick.m_PrevWeapon)
+			Quick.m_State = 0;
+		else
+			Input.m_WantedWeapon = Quick.m_PrevWeapon + 1;
+		break;
+	default:
+		Quick.m_State = 0;
+		break;
+	}
 }
 
 void CControls::OnConsoleInit()
@@ -281,6 +387,8 @@ int CControls::SnapInput(int *pData)
 
 		if(!m_aInputData[g_Config.m_ClDummy].m_TargetX && !m_aInputData[g_Config.m_ClDummy].m_TargetY)
 			m_aInputData[g_Config.m_ClDummy].m_TargetX = 1;
+
+		UpdateQuickHammer(g_Config.m_ClDummy);
 
 		// set direction
 		m_aInputData[g_Config.m_ClDummy].m_Direction = 0;
